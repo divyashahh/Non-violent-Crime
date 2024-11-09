@@ -1,0 +1,206 @@
+# Import necessary libraries
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import confusion_matrix, classification_report, accuracy_score
+
+# Load the CSV file with a specified encoding
+crime_df = pd.read_csv(r"C:\Users\krist\OneDrive\Desktop\D&S3\crimedata2.csv", encoding='ISO-8859-1')
+
+# Display the column names in the dataset
+print("Columns in the dataset:")
+print(crime_df.columns)
+
+# Define the features to keep (with the correct names)
+features_to_keep = [
+    'Êcommunityname', 'state', 'population', 'agePct12t21', 'agePct12t29', 
+    'agePct16t24', 'PctNotHSGrad', 'burglaries', 'burglPerPop', 'larcenies', 
+    'larcPerPop', 'autoTheft', 'autoTheftPerPop', 'arsons', 'arsonsPerPop', 
+    'nonViolPerPop'
+]
+
+# Ensure that only columns that actually exist in the DataFrame are selected
+features_to_keep_existing = [col for col in features_to_keep if col in crime_df.columns]
+
+# Filter the dataframe to keep only the selected features
+crime_df = crime_df[features_to_keep_existing]
+
+# Display the first few rows of the dataset
+print(crime_df.head())
+
+# Display the shape of the dataset
+print(f"The dataset has {crime_df.shape[0]} rows and {crime_df.shape[1]} columns.")
+
+# Display data types of the columns
+print("\nData types of columns:")
+print(crime_df.dtypes)
+
+# Replace "?" with NaN
+crime_df.replace('?', pd.NA, inplace=True)
+
+# Convert all columns to numeric except 'Êcommunityname' and 'state'
+for column in crime_df.columns:
+    if column not in ['Êcommunityname', 'state']:
+        crime_df[column] = pd.to_numeric(crime_df[column], errors='coerce')
+
+# Impute NaN values with the median of each column
+for column in crime_df.columns:
+    if column not in ['Êcommunityname', 'state']:
+        median_value = crime_df[column].median()
+        crime_df[column].fillna(median_value, inplace=True)
+
+# Display the first few rows to verify imputation
+print(crime_df.head())
+
+# Display the shape of the dataset after imputation
+print(f"The dataset after imputation has {crime_df.shape[0]} rows and {crime_df.shape[1]} columns.")
+
+# Display descriptive statistics
+print("\nDescriptive statistics:")
+print(crime_df.describe())
+
+# Display correlation matrix
+print("\nCorrelation matrix:")
+correlation_matrix = crime_df.corr()
+print(correlation_matrix)
+
+# Create a heatmap for the correlation matrix
+plt.figure(figsize=(12, 8))
+sns.heatmap(correlation_matrix, annot=True, fmt=".2f", cmap='coolwarm', square=True, cbar=True)
+plt.title('Heatmap of Feature Correlations', fontsize=16)
+plt.show()
+
+# Comment on the percentage threshold for higher density locations
+print("\nNote: In our research question, we consider a location with a higher density of individuals aged 16-24 to be one where the percentage of this age group is at least 14.345%. This threshold is based on the fact that 75% of the data has at least 14.345% of individuals aged 16-24 living in those locations.")
+
+# Calculate the average of the 'agePct16t24' column
+average_agePct16t24 = crime_df['agePct16t24'].mean()
+print("\nThe average percentage of individuals aged 16-24 is:", average_agePct16t24)
+
+# Find the maximum value in the 'agePct16t24' column
+max_agePct16t24 = crime_df['agePct16t24'].max()
+print("The maximum percentage of individuals aged 16-24 is:", max_agePct16t24)
+
+# Add a new column 'PopulationDensityCategory'
+crime_df['PopulationDensityCategory'] = crime_df['agePct16t24'].apply(
+    lambda x: 'High Populated Dense Area' if x >= 14.345 else 'Not High Populated Dense Area'
+)
+
+# Create categories for each crime feature: Burglaries, Larcenies, Auto Theft
+crime_df['Burglaries_Category'] = pd.cut(crime_df['burglaries'], 
+                                           bins=[-float('inf'), 95, 507.5, float('inf')], 
+                                           labels=['Low', 'Medium', 'High'])
+crime_df['Larcenies_Category'] = pd.cut(crime_df['larcenies'], 
+                                         bins=[-float('inf'), 392.5, 1673, float('inf')], 
+                                         labels=['Low', 'Medium', 'High'])
+crime_df['AutoTheft_Category'] = pd.cut(crime_df['autoTheft'], 
+                                        bins=[-float('inf'), 30, 231.5, float('inf')], 
+                                        labels=['Low', 'Medium', 'High'])
+
+# Display the counts of each category for each crime type
+print("\nBurglaries Category Counts:")
+print(crime_df['Burglaries_Category'].value_counts())
+
+print("\nLarcenies Category Counts:")
+print(crime_df['Larcenies_Category'].value_counts())
+
+print("\nAuto Theft Category Counts:")
+print(crime_df['AutoTheft_Category'].value_counts())
+
+# Baseline Model: Majority Class Predictor
+def baseline_model(df, column):
+    return df[column].mode()[0]
+
+# Evaluating baseline model accuracy
+burglaries_baseline_accuracy = (crime_df['Burglaries_Category'] == baseline_model(crime_df, 'Burglaries_Category')).mean()
+larcenies_baseline_accuracy = (crime_df['Larcenies_Category'] == baseline_model(crime_df, 'Larcenies_Category')).mean()
+auto_theft_baseline_accuracy = (crime_df['AutoTheft_Category'] == baseline_model(crime_df, 'AutoTheft_Category')).mean()
+
+print(f"\nBurglaries Baseline Model Accuracy: {burglaries_baseline_accuracy:.4f}")
+print(f"Larcenies Baseline Model Accuracy: {larcenies_baseline_accuracy:.4f}")
+print(f"Auto Theft Baseline Model Accuracy: {auto_theft_baseline_accuracy:.4f}")
+
+# Display the first few rows to verify the new column
+print("\nFirst few rows with the new column 'PopulationDensityCategory':")
+print(crime_df.head())
+
+# Box plot to visualize non-violent crimes based on population density category
+plt.figure(figsize=(12, 6))
+sns.boxplot(x='PopulationDensityCategory', y='nonViolPerPop', data=crime_df)
+plt.title('Box Plot of Non-Violent Crimes by Population Density Category', fontsize=16)
+plt.xlabel('Population Density Category', fontsize=12)
+plt.ylabel('Non-Violent Crimes per Population', fontsize=12)
+plt.show()
+
+# Plot 'nonViolPerPop' against 'agePct16t24'
+plt.figure(figsize=(10, 6))
+plt.scatter(crime_df['nonViolPerPop'], crime_df['agePct16t24'], color='blue', alpha=0.5)
+plt.title('Relationship between Non-Violent Crimes and Age 16-24 Percent', fontsize=14)
+plt.xlabel('Non-Violent Crimes per Population', fontsize=12)
+plt.ylabel('Percentage of Population Aged 16-24', fontsize=12)
+plt.show()
+
+# Create training and testing sets - 75/25
+crime_train, crime_test = train_test_split(crime_df, test_size=0.25, random_state=2)
+print(f"Training set shape: {crime_train.shape}")
+print(f"Test set shape: {crime_test.shape}")
+
+# Define X and y for training
+X = crime_train[['population', 'agePct16t24', 'PctNotHSGrad','nonViolPerPop']]
+y = crime_train['Burglaries_Category']
+
+# Define X and y for testing
+X_test = crime_test[['population', 'agePct16t24', 'PctNotHSGrad','nonViolPerPop']]
+y_test = crime_test['Burglaries_Category']
+
+# Initialize and fit the Decision Tree models
+cart01 = DecisionTreeClassifier(max_leaf_nodes=5).fit(X, y)
+c50_01 = DecisionTreeClassifier(criterion="entropy", max_leaf_nodes=5).fit(X, y)
+
+# Initialize and fit the Random Forest model
+rf01 = RandomForestClassifier(n_estimators=10, criterion="gini").fit(X, y)
+
+# Predict using the trained models
+y_pred_cart = cart01.predict(X_test)
+y_pred_c50 = c50_01.predict(X_test)
+y_pred_rf = rf01.predict(X_test)
+
+# Calculate accuracy for each model
+accuracy_cart = accuracy_score(y_test, y_pred_cart)
+accuracy_c50 = accuracy_score(y_test, y_pred_c50)
+accuracy_rf = accuracy_score(y_test, y_pred_rf)
+
+# Print the accuracy for each model
+print(f"Decision Tree (CART) Accuracy: {accuracy_cart:.4f}")
+print(f"Decision Tree (C5.0) Accuracy: {accuracy_c50:.4f}")
+print(f"Random Forest Accuracy: {accuracy_rf:.4f}")
+
+# Create a DataFrame to compare actual and predicted values for each model
+results = pd.DataFrame({
+    'Actual': y_test,
+    'Predicted_CART': y_pred_cart,
+    'Predicted_C5.0': y_pred_c50,
+    'Predicted_RF': y_pred_rf
+})
+
+# Display the first few rows of the results DataFrame
+print(results.head())
+
+# Generate the confusion matrix for the Random Forest model
+conf_matrix_rf = confusion_matrix(y_test, y_pred_rf)
+
+# Plot the confusion matrix using a heatmap
+plt.figure(figsize=(8, 6))
+sns.heatmap(conf_matrix_rf, annot=True, fmt="d", cmap='Blues', cbar=False, 
+            xticklabels=['Low', 'Medium', 'High'], yticklabels=['Low', 'Medium', 'High'])
+plt.title('Confusion Matrix for Random Forest Model With Burglaries', fontsize=16)
+plt.xlabel('Predicted', fontsize=12)
+plt.ylabel('Actual', fontsize=12)
+plt.show()
+
+# Optionally, print the confusion matrix as well
+print("\nConfusion Matrix for Random Forest Model:")
+print(conf_matrix_rf)
