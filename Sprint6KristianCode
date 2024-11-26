@@ -1,0 +1,496 @@
+# Import necessary libraries
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import confusion_matrix, classification_report, accuracy_score
+
+# Load the CSV file with a specified encoding
+crime_df = pd.read_csv(r"C:\Users\krist\OneDrive\Desktop\D&S3\crimedata2.csv", encoding='ISO-8859-1')
+
+# Display the column names in the dataset
+print("Columns in the dataset:")
+print(crime_df.columns)
+
+# Define the features to keep (with the correct names)
+features_to_keep = [
+    'Êcommunityname', 'state', 'population', 'agePct12t21', 'agePct12t29', 
+    'agePct16t24', 'PctNotHSGrad', 'burglaries', 'burglPerPop', 'larcenies', 
+    'larcPerPop', 'autoTheft', 'autoTheftPerPop', 'arsons', 'arsonsPerPop', 
+    'nonViolPerPop', 'racepctblack' , 'racePctWhite', 'racePctAsian', 'racePctHisp', 'PctUnemployed', 'medIncome'
+]
+
+# Ensure that only columns that actually exist in the DataFrame are selected
+features_to_keep_existing = [col for col in features_to_keep if col in crime_df.columns]
+
+# Filter the dataframe to keep only the selected features
+crime_df = crime_df[features_to_keep_existing]
+
+# Display the first few rows of the dataset
+print(crime_df.head())
+
+# Display the shape of the dataset
+print(f"The dataset has {crime_df.shape[0]} rows and {crime_df.shape[1]} columns.")
+
+# Display data types of the columns
+print("\nData types of columns:")
+print(crime_df.dtypes)
+
+# Replace "?" with NaN
+crime_df.replace('?', pd.NA, inplace=True)
+
+# Convert all columns to numeric except 'Êcommunityname' and 'state'
+for column in crime_df.columns:
+    if column not in ['Êcommunityname', 'state']:
+        crime_df[column] = pd.to_numeric(crime_df[column], errors='coerce')
+
+# Impute NaN values with the median of each column
+for column in crime_df.columns:
+    if column not in ['Êcommunityname', 'state']:
+        median_value = crime_df[column].median()
+        crime_df[column].fillna(median_value, inplace=True)
+
+# Display the first few rows to verify imputation
+print(crime_df.head())
+
+# Display the shape of the dataset after imputation
+print(f"The dataset after imputation has {crime_df.shape[0]} rows and {crime_df.shape[1]} columns.")
+
+# Display descriptive statistics
+print("\nDescriptive statistics:")
+print(crime_df.describe())
+
+# Display correlation matrix
+print("\nCorrelation matrix:")
+correlation_matrix = crime_df.corr()
+print(correlation_matrix)
+
+# Create a heatmap for the correlation matrix
+plt.figure(figsize=(12, 8))
+sns.heatmap(correlation_matrix, annot=True, fmt=".2f", cmap='coolwarm', square=True, cbar=True)
+plt.title('Heatmap of Feature Correlations', fontsize=16)
+plt.show()
+
+# Comment on the percentage threshold for higher density locations
+print("\nNote: In our research question, we consider a location with a higher density of individuals aged 16-24 to be one where the percentage of this age group is at least 14.345%. This threshold is based on the fact that 75% of the data has at least 14.345% of individuals aged 16-24 living in those locations.")
+
+# Calculate the average of the 'agePct16t24' column
+average_agePct16t24 = crime_df['agePct16t24'].mean()
+print("\nThe average percentage of individuals aged 16-24 is:", average_agePct16t24)
+
+# Find the maximum value in the 'agePct16t24' column
+max_agePct16t24 = crime_df['agePct16t24'].max()
+print("The maximum percentage of individuals aged 16-24 is:", max_agePct16t24)
+
+# Add a new column 'PopulationDensityCategory'
+crime_df['PopulationDensityCategory'] = crime_df['agePct16t24'].apply(
+    lambda x: 'High Populated Dense Area' if x >= 14.345 else 'Not High Populated Dense Area'
+)
+
+# Box plot to visualize non-violent crimes based on population density category
+plt.figure(figsize=(12, 6))
+sns.boxplot(x='PopulationDensityCategory', y='nonViolPerPop', data=crime_df)
+plt.title('Box Plot of Non-Violent Crimes by Population Density Category', fontsize=16)
+plt.xlabel('Population Density Category', fontsize=12)
+plt.ylabel('Non-Violent Crimes per Population', fontsize=12)
+plt.show()
+
+# Create categories for each crime feature: Burglaries, Larcenies, Auto Theft
+crime_df['Burglaries_Category'] = pd.cut(crime_df['burglaries'], 
+                                           bins=[-float('inf'), 95, 507.5, float('inf')], 
+                                           labels=['Low', 'Medium', 'High'])
+crime_df['Larcenies_Category'] = pd.cut(crime_df['larcenies'], 
+                                         bins=[-float('inf'), 392.5, 1673, float('inf')], 
+                                         labels=['Low', 'Medium', 'High'])
+crime_df['AutoTheft_Category'] = pd.cut(crime_df['autoTheft'], 
+                                        bins=[-float('inf'), 30, 231.5, float('inf')], 
+                                        labels=['Low', 'Medium', 'High'])
+
+def classify_diversity(racepctblack, racePctWhite, racePctAsian, racePctHisp):
+    # Low Diversity: Any race above 90%
+    if max(racepctblack, racePctWhite, racePctAsian, racePctHisp) > 90:
+        return 'Low Diversity'
+    # Medium Diversity: No race over 90%, but any race between 70% and 90%
+    elif max(racepctblack, racePctWhite, racePctAsian, racePctHisp) > 70:
+        return 'Medium Diversity'
+    # High Diversity: No race above 70%
+    else:
+        return 'High Diversity'
+
+# Apply this function to the dataframe
+crime_df['diversity_level'] = crime_df.apply(lambda row: classify_diversity(
+    row['racepctblack'], row['racePctWhite'], row['racePctAsian'], row['racePctHisp']), axis=1)
+
+# Calculate the count of each diversity level
+diversity_counts = crime_df['diversity_level'].value_counts()
+
+print(diversity_counts)
+
+
+# Define the breakpoints for categorization (you can adjust the values based on your needs)
+bins = [0, 5, 15, float('inf')]  # 0-5% (Low), 5-15% (Medium), 15% and higher (High)
+labels = ['Low', 'Medium', 'High']
+
+# Create a new column 'UnemploymentCategory' based on the unemployment rate
+crime_df['UnemploymentCategory'] = pd.cut(crime_df['PctUnemployed'], bins=bins, labels=labels, right=False)
+
+# Display the categorized data
+print(crime_df[['PctUnemployed', 'UnemploymentCategory']].head())
+
+crime_df['medIncome_Category'] = pd.cut(crime_df['medIncome'], 
+                                      bins=[-float('inf'), 30000, 70000, float('inf')], 
+                                      labels=['Low', 'Medium', 'High'])
+
+# Display the updated dataframe
+print(crime_df[['medIncome', 'medIncome_Category']].head())
+
+# Get the minimum and maximum of the population feature
+min_population = crime_df['population'].min()
+max_population = crime_df['population'].max()
+
+print(f"Min Population: {min_population}")
+print(f"Max Population: {max_population}")
+
+# Calculate the quartiles (25th, 50th, and 75th percentiles) of the population column
+population_quartiles = crime_df['population'].quantile([0.25, 0.50, 0.75])
+print(population_quartiles)
+
+# Create bins for population based on quartiles
+crime_df['Population_Category'] = pd.cut(crime_df['population'], 
+                                          bins=[-float('inf'), 14366, 43024, float('inf')], 
+                                          labels=['Low', 'Medium', 'High'])
+
+# Check the count of each category
+population_category_counts = crime_df['Population_Category'].value_counts()
+print(population_category_counts)
+
+# Calculate the min, max, and quartiles for 'PctNotHSGrad'
+pct_not_hs_grad_min = crime_df['PctNotHSGrad'].min()
+pct_not_hs_grad_max = crime_df['PctNotHSGrad'].max()
+pct_not_hs_grad_quartiles = crime_df['PctNotHSGrad'].quantile([0.25, 0.5, 0.75])
+
+print(f"Min PctNotHSGrad: {pct_not_hs_grad_min}")
+print(f"Max PctNotHSGrad: {pct_not_hs_grad_max}")
+print(f"Quartiles PctNotHSGrad:\n{pct_not_hs_grad_quartiles}")
+
+# Create the bins for 'PctNotHSGrad' based on the quartiles
+bins = [pct_not_hs_grad_min, pct_not_hs_grad_quartiles[0.25], pct_not_hs_grad_quartiles[0.75], pct_not_hs_grad_max]
+labels = ['Low', 'Medium', 'High']
+
+# Categorize the 'PctNotHSGrad' column
+crime_df['PctNotHSGrad_Category'] = pd.cut(crime_df['PctNotHSGrad'], bins=bins, labels=labels, right=True)
+
+# Count the occurrences in each category to check the distribution
+category_counts = crime_df['PctNotHSGrad_Category'].value_counts()
+
+print("Category counts for 'PctNotHSGrad':")
+print(category_counts)
+
+# Define the min, max, and quartiles for 'nonViolPerPop'
+nonViolPerPop_min = 116.79
+nonViolPerPop_max = 27119.76
+nonViolPerPop_quartiles = {
+    0.25: 2994.265,
+    0.50: 4425.450,
+    0.75: 6100.870
+}
+# Create the bins for 'nonViolPerPop' based on the quartiles
+bins = [nonViolPerPop_min, nonViolPerPop_quartiles[0.25], nonViolPerPop_quartiles[0.75], nonViolPerPop_max]
+labels = ['Low', 'Medium', 'High']
+
+# Categorize the 'nonViolPerPop' column
+crime_df['NonViolPerPop_Category'] = pd.cut(crime_df['nonViolPerPop'], bins=bins, labels=labels, right=True)
+
+# Count the occurrences in each category to check the distribution
+category_counts = crime_df['NonViolPerPop_Category'].value_counts()
+
+print("Category counts for 'nonViolPerPop':")
+print(category_counts)
+
+
+# Perform one-hot encoding on the categorical columns
+crime_df = pd.get_dummies(crime_df, 
+                           columns=[ 'NonViolPerPop_Category', 'PctNotHSGrad_Category', 'PopulationDensityCategory', 'diversity_level', 'UnemploymentCategory', 'medIncome_Category', 'Population_Category'], 
+                            )
+
+# Display the updated dataframe to see the one-hot encoded columns
+print(crime_df.head())
+
+
+
+# Display the counts of each category for each crime type
+print("\nBurglaries Category Counts:")
+print(crime_df['Burglaries_Category'].value_counts())
+
+print("\nLarcenies Category Counts:")
+print(crime_df['Larcenies_Category'].value_counts())
+
+print("\nAuto Theft Category Counts:")
+print(crime_df['AutoTheft_Category'].value_counts())
+
+# Baseline Model: Majority Class Predictor
+def baseline_model(df, column):
+    return df[column].mode()[0]
+
+# Evaluating baseline model accuracy
+burglaries_baseline_accuracy = (crime_df['Burglaries_Category'] == baseline_model(crime_df, 'Burglaries_Category')).mean()
+larcenies_baseline_accuracy = (crime_df['Larcenies_Category'] == baseline_model(crime_df, 'Larcenies_Category')).mean()
+auto_theft_baseline_accuracy = (crime_df['AutoTheft_Category'] == baseline_model(crime_df, 'AutoTheft_Category')).mean()
+
+print(f"\nBurglaries Baseline Model Accuracy: {burglaries_baseline_accuracy:.4f}")
+print(f"Larcenies Baseline Model Accuracy: {larcenies_baseline_accuracy:.4f}")
+print(f"Auto Theft Baseline Model Accuracy: {auto_theft_baseline_accuracy:.4f}")
+
+# Display the first few rows to verify the new column
+print("\nFirst few rows with the new column 'PopulationDensityCategory':")
+print(crime_df.head())
+
+# Plot 'nonViolPerPop' against 'agePct16t24'
+plt.figure(figsize=(10, 6))
+plt.scatter(crime_df['nonViolPerPop'], crime_df['agePct16t24'], color='blue', alpha=0.5)
+plt.title('Relationship between Non-Violent Crimes and Age 16-24 Percent', fontsize=14)
+plt.xlabel('Non-Violent Crimes per Population', fontsize=12)
+plt.ylabel('Percentage of Population Aged 16-24', fontsize=12)
+plt.show()
+
+# Create training and testing sets - 75/25
+crime_train, crime_test = train_test_split(crime_df, test_size=0.25, random_state=2)
+print(f"Training set shape: {crime_train.shape}")
+print(f"Test set shape: {crime_test.shape}")
+
+# Define X and y for training
+X = crime_train[["NonViolPerPop_Category_Low", 
+"NonViolPerPop_Category_Medium", 
+"NonViolPerPop_Category_High", 
+"PctNotHSGrad_Category_Low", 
+"PctNotHSGrad_Category_Medium", 
+"PctNotHSGrad_Category_High", 
+"PopulationDensityCategory_High Populated Dense Area", 
+"PopulationDensityCategory_Not High Populated Dense Area", 
+"diversity_level_Low Diversity", 
+"diversity_level_Medium Diversity", 
+"diversity_level_High Diversity", 
+"UnemploymentCategory_Low", 
+"UnemploymentCategory_Medium", 
+"UnemploymentCategory_High", 
+"medIncome_Category_Low", 
+"medIncome_Category_Medium", 
+"medIncome_Category_High", 
+"Population_Category_Low", 
+"Population_Category_Medium", 
+"Population_Category_High"]]
+y = crime_train['Burglaries_Category']
+
+# Define X and y for testing
+X_test = crime_test[["NonViolPerPop_Category_Low", 
+"NonViolPerPop_Category_Medium", 
+"NonViolPerPop_Category_High", 
+"PctNotHSGrad_Category_Low", 
+"PctNotHSGrad_Category_Medium", 
+"PctNotHSGrad_Category_High", 
+"PopulationDensityCategory_High Populated Dense Area", 
+"PopulationDensityCategory_Not High Populated Dense Area", 
+"diversity_level_Low Diversity", 
+"diversity_level_Medium Diversity", 
+"diversity_level_High Diversity", 
+"UnemploymentCategory_Low", 
+"UnemploymentCategory_Medium", 
+"UnemploymentCategory_High", 
+"medIncome_Category_Low", 
+"medIncome_Category_Medium", 
+"medIncome_Category_High", 
+"Population_Category_Low", 
+"Population_Category_Medium", 
+"Population_Category_High"]]
+y_test = crime_test['Burglaries_Category']
+
+# Initialize and fit the Decision Tree models
+cart01 = DecisionTreeClassifier(max_leaf_nodes=5).fit(X, y)
+c50_01 = DecisionTreeClassifier(criterion="entropy", max_leaf_nodes=5).fit(X, y)
+
+# Initialize and fit the Random Forest model
+rf01 = RandomForestClassifier(n_estimators=10, criterion="gini").fit(X, y)
+
+# Predict using the trained models
+y_pred_cart = cart01.predict(X_test)
+y_pred_c50 = c50_01.predict(X_test)
+y_pred_rf = rf01.predict(X_test)
+
+# Calculate accuracy for each model
+accuracy_cart = accuracy_score(y_test, y_pred_cart)
+accuracy_c50 = accuracy_score(y_test, y_pred_c50)
+accuracy_rf = accuracy_score(y_test, y_pred_rf)
+
+# Print the accuracy for each model
+print(f"Decision Tree (CART) Accuracy: {accuracy_cart:.4f}")
+print(f"Decision Tree (C5.0) Accuracy: {accuracy_c50:.4f}")
+print(f"Random Forest Accuracy: {accuracy_rf:.4f}")
+
+# Create a DataFrame to compare actual and predicted values for each model
+results = pd.DataFrame({
+    'Actual': y_test,
+    'Predicted_CART': y_pred_cart,
+    'Predicted_C5.0': y_pred_c50,
+    'Predicted_RF': y_pred_rf
+})
+
+# Display the first few rows of the results DataFrame
+print(results.head())
+
+# Generate the confusion matrix for the Random Forest model
+conf_matrix_rf = confusion_matrix(y_test, y_pred_rf)
+
+# Plot the confusion matrix using a heatmap
+plt.figure(figsize=(8, 6))
+sns.heatmap(conf_matrix_rf, annot=True, fmt="d", cmap='Blues', cbar=False, 
+            xticklabels=['Low', 'Medium', 'High'], yticklabels=['Low', 'Medium', 'High'])
+plt.title('Confusion Matrix for Random Forest Model With Burglaries', fontsize=16)
+plt.xlabel('Predicted', fontsize=12)
+plt.ylabel('Actual', fontsize=12)
+plt.show()
+
+# Optionally, print the confusion matrix as well
+print("\nConfusion Matrix for Random Forest Model:")
+print(conf_matrix_rf)
+
+# Define X and y for predicting Larcenies_Category
+X_larcenies = crime_train[["NonViolPerPop_Category_Low", 
+"NonViolPerPop_Category_Medium", 
+"NonViolPerPop_Category_High", 
+"PctNotHSGrad_Category_Low", 
+"PctNotHSGrad_Category_Medium", 
+"PctNotHSGrad_Category_High", 
+"PopulationDensityCategory_High Populated Dense Area", 
+"PopulationDensityCategory_Not High Populated Dense Area", 
+"diversity_level_Low Diversity", 
+"diversity_level_Medium Diversity", 
+"diversity_level_High Diversity", 
+"UnemploymentCategory_Low", 
+"UnemploymentCategory_Medium", 
+"UnemploymentCategory_High", 
+"medIncome_Category_Low", 
+"medIncome_Category_Medium", 
+"medIncome_Category_High", 
+"Population_Category_Low", 
+"Population_Category_Medium", 
+"Population_Category_High"]]
+y_larcenies = crime_train['Larcenies_Category']
+
+# Define X and y for testing
+X_test_larcenies = crime_test[["NonViolPerPop_Category_Low", 
+"NonViolPerPop_Category_Medium", 
+"NonViolPerPop_Category_High", 
+"PctNotHSGrad_Category_Low", 
+"PctNotHSGrad_Category_Medium", 
+"PctNotHSGrad_Category_High", 
+"PopulationDensityCategory_High Populated Dense Area", 
+"PopulationDensityCategory_Not High Populated Dense Area", 
+"diversity_level_Low Diversity", 
+"diversity_level_Medium Diversity", 
+"diversity_level_High Diversity", 
+"UnemploymentCategory_Low", 
+"UnemploymentCategory_Medium", 
+"UnemploymentCategory_High", 
+"medIncome_Category_Low", 
+"medIncome_Category_Medium", 
+"medIncome_Category_High", 
+"Population_Category_Low", 
+"Population_Category_Medium", 
+"Population_Category_High"]]
+y_test_larcenies = crime_test['Larcenies_Category']
+
+# Initialize and fit the Decision Tree model
+dt_larcenies = DecisionTreeClassifier(max_leaf_nodes=5, random_state=2).fit(X_larcenies, y_larcenies)
+
+# Predict using the trained model
+y_pred_dt_larcenies = dt_larcenies.predict(X_test_larcenies)
+
+# Calculate accuracy for the Decision Tree model
+accuracy_dt_larcenies = accuracy_score(y_test_larcenies, y_pred_dt_larcenies)
+print(f"Decision Tree Accuracy for Larcenies_Category: {accuracy_dt_larcenies:.4f}")
+
+# Generate and plot the confusion matrix for the Decision Tree model
+conf_matrix_dt_larcenies = confusion_matrix(y_test_larcenies, y_pred_dt_larcenies)
+
+plt.figure(figsize=(8, 6))
+sns.heatmap(conf_matrix_dt_larcenies, annot=True, fmt="d", cmap='Blues', cbar=False, 
+            xticklabels=['Low', 'Medium', 'High'], yticklabels=['Low', 'Medium', 'High'])
+plt.title('Confusion Matrix for Decision Tree Model with Larcenies_Category', fontsize=16)
+plt.xlabel('Predicted', fontsize=12)
+plt.ylabel('Actual', fontsize=12)
+plt.show()
+
+# Import GaussianNB for Naive Bayes
+from sklearn.naive_bayes import GaussianNB
+
+# Define X and y for predicting AutoTheft_Category
+X_auto_theft = crime_train[["NonViolPerPop_Category_Low", 
+"NonViolPerPop_Category_Medium", 
+"NonViolPerPop_Category_High", 
+"PctNotHSGrad_Category_Low", 
+"PctNotHSGrad_Category_Medium", 
+"PctNotHSGrad_Category_High", 
+"PopulationDensityCategory_High Populated Dense Area", 
+"PopulationDensityCategory_Not High Populated Dense Area", 
+"diversity_level_Low Diversity", 
+"diversity_level_Medium Diversity", 
+"diversity_level_High Diversity", 
+"UnemploymentCategory_Low", 
+"UnemploymentCategory_Medium", 
+"UnemploymentCategory_High", 
+"medIncome_Category_Low", 
+"medIncome_Category_Medium", 
+"medIncome_Category_High", 
+"Population_Category_Low", 
+"Population_Category_Medium", 
+"Population_Category_High"]]
+
+y_auto_theft = crime_train['AutoTheft_Category']
+
+# Define X and y for testing
+X_test_auto_theft = crime_test[["NonViolPerPop_Category_Low", 
+"NonViolPerPop_Category_Medium", 
+"NonViolPerPop_Category_High", 
+"PctNotHSGrad_Category_Low", 
+"PctNotHSGrad_Category_Medium", 
+"PctNotHSGrad_Category_High", 
+"PopulationDensityCategory_High Populated Dense Area", 
+"PopulationDensityCategory_Not High Populated Dense Area", 
+"diversity_level_Low Diversity", 
+"diversity_level_Medium Diversity", 
+"diversity_level_High Diversity", 
+"UnemploymentCategory_Low", 
+"UnemploymentCategory_Medium", 
+"UnemploymentCategory_High", 
+"medIncome_Category_Low", 
+"medIncome_Category_Medium", 
+"medIncome_Category_High", 
+"Population_Category_Low", 
+"Population_Category_Medium", 
+"Population_Category_High"]]
+
+y_test_auto_theft = crime_test['AutoTheft_Category']
+
+
+# Initialize and fit the Naive Bayes model
+nb_auto_theft = GaussianNB().fit(X_auto_theft, y_auto_theft)
+
+# Predict using the trained model
+y_pred_nb_auto_theft = nb_auto_theft.predict(X_test_auto_theft)
+
+# Calculate accuracy for the Naive Bayes model
+accuracy_nb_auto_theft = accuracy_score(y_test_auto_theft, y_pred_nb_auto_theft)
+print(f"Naive Bayes Accuracy for AutoTheft_Category: {accuracy_nb_auto_theft:.4f}")
+
+# Generate and plot the confusion matrix for the Naive Bayes model
+conf_matrix_nb_auto_theft = confusion_matrix(y_test_auto_theft, y_pred_nb_auto_theft)
+
+plt.figure(figsize=(8, 6))
+sns.heatmap(conf_matrix_nb_auto_theft, annot=True, fmt="d", cmap='Blues', cbar=False, 
+            xticklabels=['Low', 'Medium', 'High'], yticklabels=['Low', 'Medium', 'High'])
+plt.title('Confusion Matrix for Naive Bayes Model with AutoTheft_Category', fontsize=16)
+plt.xlabel('Predicted', fontsize=12)
+plt.ylabel('Actual', fontsize=12)
+plt.show()
